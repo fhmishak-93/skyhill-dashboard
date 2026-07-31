@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Skyhill — Marketing &amp; Sales Dashboard</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1" integrity="sha384-jb8JQMbMoBUzgWatfe6COACi2ljcDdZQ2OxczGA3bGNeWe+6DChMTBJemed7ZnvJ" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js" integrity="sha384-EAmp/CyEeQzbAWLPQaTb/mBpjJZm5CtBoOqW/o5tqXzomFAY6cVLcRtWL1cCUNMr" crossorigin="anonymous"></script>
 <style>
 :root{
   --bg-primary:#f7f8fa; --bg-card:#ffffff; --bg-header:#12203a;
@@ -24,6 +25,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .filter-group label{font-size:11px;color:rgba(255,255,255,.65);text-transform:uppercase;letter-spacing:.4px;}
 .filter-group select{padding:7px 10px;border:1px solid rgba(255,255,255,.25);border-radius:6px;background:rgba(255,255,255,.1);color:var(--text-on-dark);font-size:13px;}
 .filter-group select option{background:var(--bg-header);color:var(--text-on-dark);}
+.refresh-group{display:flex;flex-direction:column;gap:4px;align-items:flex-end;}
+.refresh-btn{padding:7px 14px;border:1px solid rgba(255,255,255,.3);border-radius:6px;background:rgba(255,255,255,.12);color:#fff;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:6px;}
+.refresh-btn:hover{background:rgba(255,255,255,.2);}
+.refresh-btn:disabled{opacity:.5;cursor:default;}
+.last-updated{font-size:11px;color:rgba(255,255,255,.6);}
 .kpi-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:var(--gap);margin-bottom:var(--gap);}
 .kpi-card{background:var(--bg-card);border-radius:var(--radius);padding:18px 22px;box-shadow:0 1px 3px rgba(0,0,0,.08);}
 .kpi-label{font-size:12px;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;}
@@ -45,6 +51,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .branch-tag.johor{background:#fdeee0;color:#e08a3c;}
 .dashboard-footer{text-align:center;font-size:12px;color:var(--text-secondary);padding:14px 0 4px;}
 .note{font-size:12px;color:var(--text-secondary);background:#fff9e8;border:1px solid #f0e2a8;padding:8px 14px;border-radius:6px;margin-bottom:var(--gap);}
+.error-banner{font-size:13px;color:#8a1f1f;background:#fdeaea;border:1px solid #f3b8b8;padding:10px 14px;border-radius:6px;margin-bottom:var(--gap);display:none;}
+.error-banner.show{display:block;}
+.loading-overlay{text-align:center;padding:60px 0;color:var(--text-secondary);font-size:14px;}
+.spinner{display:inline-block;width:16px;height:16px;border:2px solid #d7dbe3;border-top-color:var(--color-1);border-radius:50%;animation:spin .7s linear infinite;margin-right:8px;vertical-align:-3px;}
+@keyframes spin{to{transform:rotate(360deg);}}
 @media(max-width:768px){.kpi-row{grid-template-columns:repeat(2,1fr);}.chart-row{grid-template-columns:1fr;}}
 </style>
 </head>
@@ -53,7 +64,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
   <header class="dashboard-header">
     <div>
       <h1>Skyhill — Marketing &amp; Sales Dashboard</h1>
-      <p>Amounts in RM (Malaysian Ringgit) · Denai Alam &amp; Johor branches · Jan–Jun reported, Jul–Dec pending</p>
+      <p>Amounts in RM (Malaysian Ringgit) · Denai Alam &amp; Johor branches · Live from Google Sheets</p>
     </div>
     <div class="filters">
       <div class="filter-group">
@@ -67,85 +78,96 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
       <div class="filter-group">
         <label for="filter-month">Month</label>
         <select id="filter-month" onchange="dashboard.applyFilters()">
-          <option value="all">All Months (Jan–Jun)</option>
+          <option value="all">All Months</option>
           <option value="Jan">Jan</option>
           <option value="Feb">Feb</option>
           <option value="Mar">Mar</option>
           <option value="Apr">Apr</option>
           <option value="May">May</option>
           <option value="Jun">Jun</option>
+          <option value="Jul">Jul</option>
+          <option value="Aug">Aug</option>
+          <option value="Sep">Sep</option>
+          <option value="Oct">Oct</option>
+          <option value="Nov">Nov</option>
+          <option value="Dec">Dec</option>
         </select>
+      </div>
+      <div class="refresh-group">
+        <button class="refresh-btn" id="refresh-btn" onclick="dashboard.loadData(true)">⟳ Refresh</button>
+        <span class="last-updated" id="last-updated">Loading…</span>
       </div>
     </div>
   </header>
 
-  <div class="note">Jul–Dec have no reported data yet in the source sheets — they're excluded from charts/KPIs below.</div>
+  <div class="error-banner" id="error-banner"></div>
+  <div class="note" id="pending-note" style="display:none;">Some months have no reported data yet in the source sheets — they're excluded from charts/KPIs below.</div>
 
-  <section class="kpi-row" id="kpi-row"></section>
+  <div id="loading" class="loading-overlay"><span class="spinner"></span>Loading live data from Google Sheets…</div>
+  <div id="dashboard-body" style="display:none;">
+    <section class="kpi-row" id="kpi-row"></section>
 
-  <section class="chart-row">
-    <div class="chart-container">
-      <h3>Ad Spend by Branch</h3>
-      <canvas id="spendChart"></canvas>
-    </div>
-    <div class="chart-container">
-      <h3>Total Sales by Branch</h3>
-      <canvas id="salesChart"></canvas>
-    </div>
-  </section>
+    <section class="chart-row">
+      <div class="chart-container">
+        <h3>Ad Spend by Branch</h3>
+        <canvas id="spendChart"></canvas>
+      </div>
+      <div class="chart-container">
+        <h3>Total Sales by Branch</h3>
+        <canvas id="salesChart"></canvas>
+      </div>
+    </section>
 
-  <section class="chart-row">
-    <div class="chart-container">
-      <h3>Leads Generated by Branch</h3>
-      <canvas id="leadsChart"></canvas>
-    </div>
-    <div class="chart-container">
-      <h3>Blended ROAS by Branch</h3>
-      <canvas id="roasChart"></canvas>
-    </div>
-  </section>
+    <section class="chart-row">
+      <div class="chart-container">
+        <h3>Leads Generated by Branch</h3>
+        <canvas id="leadsChart"></canvas>
+      </div>
+      <div class="chart-container">
+        <h3>Blended ROAS by Branch</h3>
+        <canvas id="roasChart"></canvas>
+      </div>
+    </section>
 
-  <section class="chart-row">
-    <div class="chart-container">
-      <h3>Appointment Rate vs Closing Rate</h3>
-      <canvas id="rateChart"></canvas>
-    </div>
-    <div class="chart-container">
-      <h3>Cost per Lead / CPA (RM)</h3>
-      <canvas id="cplCpaChart"></canvas>
-    </div>
-  </section>
+    <section class="chart-row">
+      <div class="chart-container">
+        <h3>Appointment Rate vs Closing Rate</h3>
+        <canvas id="rateChart"></canvas>
+      </div>
+      <div class="chart-container">
+        <h3>Cost per Lead / CPA (RM)</h3>
+        <canvas id="cplCpaChart"></canvas>
+      </div>
+    </section>
 
-  <section class="table-section">
-    <h3>Monthly Detail</h3>
-    <div id="detail-table"></div>
-  </section>
+    <section class="table-section">
+      <h3>Monthly Detail</h3>
+      <div id="detail-table"></div>
+    </section>
+  </div>
 
-  <footer class="dashboard-footer">Source: Skyhill Denai Alam &amp; Johor Google Sheets · Dashboard for the Skyhill team · Prepared by Fahmi</footer>
+  <footer class="dashboard-footer">Source: Skyhill Denai Alam &amp; Johor Google Sheets (live) · Dashboard for the Skyhill team · Prepared by Fahmi</footer>
 </div>
 
 <script>
-const DATA = [
-  // Denai Alam
-  {branch:'Denai Alam', month:'Jan', spend:26203.00, campaigns:6, leads:1655, cpl:15.83, appt:91, conv:57, cpa:459.70, clinicSales:1080918.00, salesDiag:88407.00, sales1st:null, totalSales:88407.00, roasDiag:3.37, roas1st:null, apptRate:18.33, closeRate:62.64},
-  {branch:'Denai Alam', month:'Feb', spend:12623.00, campaigns:7, leads:1244, cpl:10.15, appt:71, conv:44, cpa:286.89, clinicSales:914226.00, salesDiag:78956.00, sales1st:233484.00, totalSales:312440.00, roasDiag:6.25, roas1st:8.91, apptRate:19.02, closeRate:61.97},
-  {branch:'Denai Alam', month:'Mar', spend:6624.00, campaigns:3, leads:998, cpl:6.64, appt:23, conv:18, cpa:368.00, clinicSales:904917.00, salesDiag:32482.00, sales1st:67560.00, totalSales:100042.00, roasDiag:4.90, roas1st:5.35, apptRate:7.68, closeRate:78.26},
-  {branch:'Denai Alam', month:'Apr', spend:8218.77, campaigns:4, leads:713, cpl:11.53, appt:89, conv:49, cpa:167.73, clinicSales:1294149.90, salesDiag:86552.00, sales1st:15341.00, totalSales:101893.00, roasDiag:10.53, roas1st:2.32, apptRate:41.61, closeRate:55.06},
-  {branch:'Denai Alam', month:'May', spend:18469.00, campaigns:7, leads:2029, cpl:9.10, appt:73, conv:69, cpa:267.67, clinicSales:1280033.70, salesDiag:111230.00, sales1st:38970.00, totalSales:150200.00, roasDiag:6.02, roas1st:4.74, apptRate:11.99, closeRate:94.52},
-  {branch:'Denai Alam', month:'Jun', spend:10356.00, campaigns:4, leads:1188, cpl:8.72, appt:34, conv:17, cpa:609.18, clinicSales:902488.25, salesDiag:29084.00, sales1st:45766.00, totalSales:74850.00, roasDiag:2.81, roas1st:2.48, apptRate:9.54, closeRate:50.00},
-  // Johor
-  {branch:'Johor', month:'Jan', spend:17563.00, campaigns:5, leads:1146, cpl:15.33, appt:28, conv:13, cpa:1351.00, clinicSales:162490.00, salesDiag:23487.00, sales1st:null, totalSales:23487.00, roasDiag:1.34, roas1st:null, apptRate:8.14, closeRate:46.43},
-  {branch:'Johor', month:'Feb', spend:8107.00, campaigns:7, leads:713, cpl:11.37, appt:12, conv:12, cpa:675.58, clinicSales:181213.00, salesDiag:8140.00, sales1st:null, totalSales:8140.00, roasDiag:1.00, roas1st:null, apptRate:5.61, closeRate:100.00},
-  {branch:'Johor', month:'Mar', spend:7457.00, campaigns:4, leads:494, cpl:15.10, appt:25, conv:11, cpa:677.91, clinicSales:113227.00, salesDiag:23131.00, sales1st:25734.00, totalSales:48865.00, roasDiag:3.10, roas1st:3.45, apptRate:16.87, closeRate:44.00},
-  {branch:'Johor', month:'Apr', spend:16314.00, campaigns:3, leads:1170, cpl:13.94, appt:51, conv:29, cpa:562.55, clinicSales:201857.00, salesDiag:56243.00, sales1st:75473.00, totalSales:131716.00, roasDiag:3.45, roas1st:4.63, apptRate:14.53, closeRate:56.86},
-  {branch:'Johor', month:'May', spend:6195.52, campaigns:1, leads:427, cpl:14.51, appt:26, conv:18, cpa:344.20, clinicSales:194679.00, salesDiag:31127.00, sales1st:68395.00, totalSales:99522.00, roasDiag:5.02, roas1st:11.04, apptRate:20.30, closeRate:69.23},
-  {branch:'Johor', month:'Jun', spend:8799.00, campaigns:1, leads:663, cpl:13.27, appt:21, conv:8, cpa:1099.88, clinicSales:160029.00, salesDiag:25434.00, sales1st:38469.00, totalSales:63903.00, roasDiag:2.89, roas1st:4.37, apptRate:10.56, closeRate:38.10},
-];
+// ---- Configuration: Google Sheet IDs per branch ----
+const SHEETS = {
+  'Denai Alam': '1VdVDcGFGw5VbDHLNqCOXdg49caWLhUcMMRnHBabp2nU',
+  'Johor': '1m91xntyei6CUNyt757JHIrANjZ_V1Q2vYwjtd7zD8eQ',
+};
+const CSV_URL = (id) => `https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:csv&_=${Date.now()}`;
+const AUTO_REFRESH_MS = 5 * 60 * 1000; // 5 minutes
 
-const MONTH_ORDER = ['Jan','Feb','Mar','Apr','May','Jun'];
+const MONTH_ORDER = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const BRANCH_COLORS = {'Denai Alam':'#3b6fd6', 'Johor':'#e08a3c'};
-const COLORS = ['#3b6fd6','#e08a3c','#3fae6e','#d3495c','#8a6fd6','#3ba7a0'];
 
+function num(v){
+  if(v===undefined||v===null) return null;
+  const s = String(v).replace(/RM/gi,'').replace(/,/g,'').replace(/%/g,'').trim();
+  if(s==='') return null;
+  const n = parseFloat(s);
+  return isNaN(n) ? null : n;
+}
 function fmtRM(v){
   if(v===null||v===undefined||isNaN(v)) return '—';
   if(Math.abs(v)>=1e6) return 'RM'+(v/1e6).toFixed(2)+'M';
@@ -156,22 +178,110 @@ function fmtNum(v){ if(v===null||v===undefined) return '—'; return v.toLocaleS
 function fmtPct(v){ if(v===null||v===undefined||isNaN(v)) return '—'; return v.toFixed(1)+'%'; }
 function fmtX(v){ if(v===null||v===undefined||isNaN(v)) return '—'; return v.toFixed(2)+'x'; }
 
+// Parse one branch's raw CSV text (as returned by Google's gviz export) into row objects.
+function parseBranchCsv(branch, csvText){
+  const parsed = Papa.parse(csvText.trim(), {skipEmptyLines:false});
+  const rows = parsed.data;
+
+  // Find the header row: first row whose first cell (trimmed) is "Month"
+  let headerIdx = -1;
+  for(let i=0;i<rows.length;i++){
+    if((rows[i][0]||'').toString().trim().toLowerCase() === 'month'){ headerIdx = i; break; }
+  }
+  if(headerIdx === -1) throw new Error(`Could not find a "Month" header row for ${branch}`);
+
+  const headers = rows[headerIdx].map(h => (h||'').toString().trim().toLowerCase());
+  // Use "contains" matching since merged title cells (e.g. "SKYHILL DENAI ALAM Amount Spend")
+  // can get prepended to a header's text by Google's export.
+  const col = (name) => headers.findIndex(h => h.includes(name));
+
+  const idx = {
+    month: col('month'),
+    spend: col('amount spend'),
+    campaigns: col('no of campaign'),
+    leads: col('no of leads'),
+    cpl: col('cost per leads'),
+    appt: col('appointment') === -1 ? -1 : headers.findIndex(h => h === 'appointment'),
+    conv: col('conversion'),
+    cpa: headers.findIndex(h => h === 'cpa'),
+    clinicSales: col('clinic sales'),
+    salesDiag: col('sales (diagnostic)'),
+    sales1st: col('sales (1st review)'),
+    totalSales: col('total sales'),
+    roasDiag: col('roas (diagnostic)'),
+    roas1st: col('roas (1st review)'),
+    apptRate: col('appointment rate'),
+    closeRate: col('closing rate'),
+  };
+
+  const out = [];
+  for(let i=headerIdx+1; i<rows.length; i++){
+    const r = rows[i];
+    if(!r || r.length===0) continue;
+    const monthCell = (r[idx.month]||'').toString().trim();
+    const monthAbbr = monthCell.slice(0,3);
+    if(!MONTH_ORDER.includes(monthAbbr)) continue; // stop once we run out of month rows
+    const spend = num(r[idx.spend]);
+    if(spend === null) continue; // month has no reported data yet — skip
+    out.push({
+      branch, month: monthAbbr,
+      spend, campaigns: num(r[idx.campaigns]), leads: num(r[idx.leads]), cpl: num(r[idx.cpl]),
+      appt: num(r[idx.appt]), conv: num(r[idx.conv]), cpa: num(r[idx.cpa]),
+      clinicSales: num(r[idx.clinicSales]), salesDiag: num(r[idx.salesDiag]), sales1st: num(r[idx.sales1st]),
+      totalSales: num(r[idx.totalSales]), roasDiag: num(r[idx.roasDiag]), roas1st: num(r[idx.roas1st]),
+      apptRate: num(r[idx.apptRate]), closeRate: num(r[idx.closeRate]),
+    });
+  }
+  return out;
+}
+
 class Dashboard{
-  constructor(data){
-    this.rawData = data;
-    this.filteredData = data;
+  constructor(){
+    this.rawData = [];
+    this.filteredData = [];
     this.charts = {};
-    this.init();
+    this.loadData();
+    setInterval(() => this.loadData(), AUTO_REFRESH_MS);
   }
-  init(){
-    this.renderKPIs();
-    this.renderCharts();
-    this.renderTable();
+
+  async loadData(manual){
+    const btn = document.getElementById('refresh-btn');
+    const errBanner = document.getElementById('error-banner');
+    if(manual){ btn.disabled = true; btn.textContent = '⟳ Refreshing…'; }
+    errBanner.classList.remove('show');
+    try{
+      const branches = Object.keys(SHEETS);
+      const results = await Promise.all(branches.map(async (branch) => {
+        const res = await fetch(CSV_URL(SHEETS[branch]));
+        if(!res.ok) throw new Error(`${branch} sheet returned HTTP ${res.status} — check it's shared as "Anyone with the link can view".`);
+        const text = await res.text();
+        if(text.trim().startsWith('<')) throw new Error(`${branch} sheet isn't publicly viewable yet — set sharing to "Anyone with the link can view".`);
+        return parseBranchCsv(branch, text);
+      }));
+      this.rawData = results.flat();
+      this.filteredData = this.rawData;
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('dashboard-body').style.display = 'block';
+      document.getElementById('pending-note').style.display =
+        this.rawData.length < branches.length * 12 ? 'block' : 'none';
+      document.getElementById('last-updated').textContent = 'Updated ' + new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+      this.applyFilters();
+    }catch(err){
+      console.error(err);
+      errBanner.textContent = '⚠ ' + err.message;
+      errBanner.classList.add('show');
+      if(this.rawData.length === 0){
+        document.getElementById('loading').style.display = 'none';
+      }
+    }finally{
+      if(manual){ btn.disabled = false; btn.textContent = '⟳ Refresh'; }
+    }
   }
+
   applyFilters(){
     const branch = document.getElementById('filter-branch').value;
     const month = document.getElementById('filter-month').value;
-    this.filteredData = this.rawData.filter(d=>
+    this.filteredData = this.rawData.filter(d =>
       (branch==='all' || d.branch===branch) && (month==='all' || d.month===month)
     );
     this.renderKPIs();
@@ -180,21 +290,26 @@ class Dashboard{
   }
   branches(){
     const branch = document.getElementById('filter-branch').value;
-    return branch==='all' ? ['Denai Alam','Johor'] : [branch];
+    const all = [...new Set(this.rawData.map(r=>r.branch))];
+    return branch==='all' ? all : [branch];
   }
   months(){
     const month = document.getElementById('filter-month').value;
-    return month==='all' ? MONTH_ORDER : [month];
+    if(month!=='all') return [month];
+    const present = new Set(this.rawData.map(r=>r.month));
+    return MONTH_ORDER.filter(m=>present.has(m));
   }
   renderKPIs(){
     const d = this.filteredData;
-    const totalSpend = d.reduce((s,r)=>s+r.spend,0);
-    const totalLeads = d.reduce((s,r)=>s+r.leads,0);
-    const totalSales = d.reduce((s,r)=>s+r.totalSales,0);
-    const totalClinicSales = d.reduce((s,r)=>s+r.clinicSales,0);
+    const totalSpend = d.reduce((s,r)=>s+(r.spend||0),0);
+    const totalLeads = d.reduce((s,r)=>s+(r.leads||0),0);
+    const totalSales = d.reduce((s,r)=>s+(r.totalSales||0),0);
+    const totalClinicSales = d.reduce((s,r)=>s+(r.clinicSales||0),0);
     const avgCpl = totalLeads ? totalSpend/totalLeads : NaN;
-    const avgApptRate = d.length ? d.reduce((s,r)=>s+r.apptRate,0)/d.length : NaN;
-    const avgCloseRate = d.length ? d.reduce((s,r)=>s+r.closeRate,0)/d.length : NaN;
+    const apptRates = d.map(r=>r.apptRate).filter(v=>v!==null);
+    const closeRates = d.map(r=>r.closeRate).filter(v=>v!==null);
+    const avgApptRate = apptRates.length ? apptRates.reduce((a,b)=>a+b,0)/apptRates.length : NaN;
+    const avgCloseRate = closeRates.length ? closeRates.reduce((a,b)=>a+b,0)/closeRates.length : NaN;
     const blendedRoas = totalSpend ? totalSales/totalSpend : NaN;
 
     const cards = [
@@ -211,7 +326,6 @@ class Dashboard{
       `<div class="kpi-card"><div class="kpi-label">${c.label}</div><div class="kpi-value">${c.value}</div></div>`
     ).join('');
   }
-  // Build per-branch datasets aligned to the active month labels
   branchSeries(field, months, branches){
     return branches.map(b=>{
       const rows = this.rawData.filter(r=>r.branch===b);
@@ -235,8 +349,8 @@ class Dashboard{
           datasets: branches.map((b,i)=>({
             label: b,
             data: seriesData[i],
-            backgroundColor: type==='line' ? BRANCH_COLORS[b]+'20' : BRANCH_COLORS[b]+'CC',
-            borderColor: BRANCH_COLORS[b],
+            backgroundColor: type==='line' ? (BRANCH_COLORS[b]||'#888')+'20' : (BRANCH_COLORS[b]||'#888')+'CC',
+            borderColor: BRANCH_COLORS[b]||'#888',
             borderWidth: type==='line' ? 2 : 1,
             borderRadius: type==='bar' ? 4 : 0,
             tension:.3, pointRadius:4
@@ -256,13 +370,13 @@ class Dashboard{
     c.roas = mk('roasChart','line','roasDiag',{fmt:v=>v+'x'});
     c.rate = new Chart(document.getElementById('rateChart').getContext('2d'), {
       type:'line',
-      data:{labels: months, datasets: branches.flatMap((b,i)=>{
+      data:{labels: months, datasets: branches.flatMap((b)=>{
         const rows = this.rawData.filter(r=>r.branch===b);
         const apptSeries = months.map(m=>{const r=rows.find(r=>r.month===m); return r?r.apptRate:null;});
         const closeSeries = months.map(m=>{const r=rows.find(r=>r.month===m); return r?r.closeRate:null;});
         return [
-          {label:`${b} — Appt Rate`, data: apptSeries, borderColor: BRANCH_COLORS[b], backgroundColor: BRANCH_COLORS[b]+'20', tension:.3, pointRadius:4, borderDash:[]},
-          {label:`${b} — Close Rate`, data: closeSeries, borderColor: BRANCH_COLORS[b], backgroundColor: BRANCH_COLORS[b]+'20', tension:.3, pointRadius:4, borderDash:[6,4]}
+          {label:`${b} — Appt Rate`, data: apptSeries, borderColor: BRANCH_COLORS[b]||'#888', backgroundColor: (BRANCH_COLORS[b]||'#888')+'20', tension:.3, pointRadius:4, borderDash:[]},
+          {label:`${b} — Close Rate`, data: closeSeries, borderColor: BRANCH_COLORS[b]||'#888', backgroundColor: (BRANCH_COLORS[b]||'#888')+'20', tension:.3, pointRadius:4, borderDash:[6,4]}
         ];
       })},
       options:{responsive:true, maintainAspectRatio:false,
@@ -275,7 +389,7 @@ class Dashboard{
       data:{labels: months, datasets: branches.flatMap((b)=>{
         const rows = this.rawData.filter(r=>r.branch===b);
         const cplSeries = months.map(m=>{const r=rows.find(r=>r.month===m); return r?r.cpl:null;});
-        return [{label:`${b} — CPL`, data: cplSeries, backgroundColor: BRANCH_COLORS[b]+'CC', borderRadius:4}];
+        return [{label:`${b} — CPL`, data: cplSeries, backgroundColor: (BRANCH_COLORS[b]||'#888')+'CC', borderRadius:4}];
       })},
       options:{responsive:true, maintainAspectRatio:false,
         plugins:{legend:{position:'top', labels:{usePointStyle:true}}},
@@ -285,6 +399,7 @@ class Dashboard{
   }
   updateCharts(){
     Object.values(this.charts).forEach(ch=>ch.destroy());
+    this.charts = {};
     this.renderCharts();
   }
   renderTable(){
@@ -342,7 +457,7 @@ class Dashboard{
   }
 }
 
-const dashboard = new Dashboard(DATA);
+const dashboard = new Dashboard();
 </script>
 </body>
 </html>
