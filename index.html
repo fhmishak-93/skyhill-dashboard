@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Skyhill — Marketing &amp; Sales Dashboard</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1" integrity="sha384-jb8JQMbMoBUzgWatfe6COACi2ljcDdZQ2OxczGA3bGNeWe+6DChMTBJemed7ZnvJ" crossorigin="anonymous"></script>
-<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js" integrity="sha384-EAmp/CyEeQzbAWLPQaTb/mBpjJZm5CtBoOqW/o5tqXzomFAY6cVLcRtWL1cCUNMr" crossorigin="anonymous"></script>
 <style>
 :root{
   --bg-primary:#f7f8fa; --bg-card:#ffffff; --bg-header:#12203a;
@@ -178,10 +177,32 @@ function fmtNum(v){ if(v===null||v===undefined) return '—'; return v.toLocaleS
 function fmtPct(v){ if(v===null||v===undefined||isNaN(v)) return '—'; return v.toFixed(1)+'%'; }
 function fmtX(v){ if(v===null||v===undefined||isNaN(v)) return '—'; return v.toFixed(2)+'x'; }
 
+// Minimal CSV parser (handles quoted fields, embedded commas, and "" escaped quotes) —
+// avoids depending on an external library for something this small.
+function parseCSV(text){
+  const rows = [];
+  let row = [], field = '', inQuotes = false;
+  for(let i=0; i<text.length; i++){
+    const c = text[i], next = text[i+1];
+    if(inQuotes){
+      if(c === '"' && next === '"'){ field += '"'; i++; }
+      else if(c === '"'){ inQuotes = false; }
+      else { field += c; }
+    }else{
+      if(c === '"'){ inQuotes = true; }
+      else if(c === ','){ row.push(field); field = ''; }
+      else if(c === '\r'){ /* skip */ }
+      else if(c === '\n'){ row.push(field); rows.push(row); row = []; field = ''; }
+      else { field += c; }
+    }
+  }
+  if(field !== '' || row.length){ row.push(field); rows.push(row); }
+  return rows;
+}
+
 // Parse one branch's raw CSV text (as returned by Google's gviz export) into row objects.
 function parseBranchCsv(branch, csvText){
-  const parsed = Papa.parse(csvText.trim(), {skipEmptyLines:false});
-  const rows = parsed.data;
+  const rows = parseCSV(csvText.trim());
 
   // Find the header row: first row whose first cell (trimmed) is "Month"
   let headerIdx = -1;
