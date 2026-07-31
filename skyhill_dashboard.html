@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Skyhill — Marketing &amp; Sales Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1" integrity="sha384-jb8JQMbMoBUzgWatfe6COACi2ljcDdZQ2OxczGA3bGNeWe+6DChMTBJemed7ZnvJ" crossorigin="anonymous"></script>
+<style>
+:root{
+  --bg-primary:#f7f8fa; --bg-card:#ffffff; --bg-header:#12203a;
+  --text-primary:#1c2333; --text-secondary:#6c7686; --text-on-dark:#ffffff;
+  --color-1:#3b6fd6; --color-2:#e08a3c; --color-3:#3fae6e; --color-4:#d3495c;
+  --color-5:#8a6fd6; --color-6:#3ba7a0;
+  --positive:#2e9e5b; --negative:#d3495c; --gap:16px; --radius:10px;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg-primary);color:var(--text-primary);line-height:1.5;}
+.dashboard-container{max-width:1400px;margin:0 auto;padding:var(--gap);}
+.dashboard-header{background:var(--bg-header);color:var(--text-on-dark);padding:22px 26px;border-radius:var(--radius);margin-bottom:var(--gap);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;}
+.dashboard-header h1{font-size:21px;font-weight:700;}
+.dashboard-header p{font-size:13px;color:rgba(255,255,255,.65);margin-top:4px;}
+.filters{display:flex;gap:12px;align-items:center;flex-wrap:wrap;}
+.filter-group{display:flex;flex-direction:column;gap:4px;}
+.filter-group label{font-size:11px;color:rgba(255,255,255,.65);text-transform:uppercase;letter-spacing:.4px;}
+.filter-group select{padding:7px 10px;border:1px solid rgba(255,255,255,.25);border-radius:6px;background:rgba(255,255,255,.1);color:var(--text-on-dark);font-size:13px;}
+.filter-group select option{background:var(--bg-header);color:var(--text-on-dark);}
+.kpi-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:var(--gap);margin-bottom:var(--gap);}
+.kpi-card{background:var(--bg-card);border-radius:var(--radius);padding:18px 22px;box-shadow:0 1px 3px rgba(0,0,0,.08);}
+.kpi-label{font-size:12px;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;}
+.kpi-value{font-size:25px;font-weight:700;}
+.kpi-sub{font-size:12px;color:var(--text-secondary);margin-top:4px;}
+.chart-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(420px,1fr));gap:var(--gap);margin-bottom:var(--gap);}
+.chart-container{background:var(--bg-card);border-radius:var(--radius);padding:20px 22px;box-shadow:0 1px 3px rgba(0,0,0,.08);}
+.chart-container h3{font-size:14px;font-weight:600;margin-bottom:14px;}
+.chart-container canvas{max-height:290px;}
+.table-section{background:var(--bg-card);border-radius:var(--radius);padding:20px 22px;box-shadow:0 1px 3px rgba(0,0,0,.08);overflow-x:auto;}
+.table-section h3{font-size:14px;font-weight:600;margin-bottom:14px;}
+.data-table{width:100%;border-collapse:collapse;font-size:12.5px;white-space:nowrap;}
+.data-table thead th{text-align:left;padding:9px 10px;border-bottom:2px solid #e2e5ea;color:var(--text-secondary);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.4px;cursor:pointer;}
+.data-table thead th:hover{color:var(--text-primary);background:#f4f6f9;}
+.data-table tbody td{padding:9px 10px;border-bottom:1px solid #f0f1f3;}
+.data-table tbody tr:hover{background:#f8f9fb;}
+.branch-tag{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;}
+.branch-tag.denai{background:#e6edfb;color:#3b6fd6;}
+.branch-tag.johor{background:#fdeee0;color:#e08a3c;}
+.dashboard-footer{text-align:center;font-size:12px;color:var(--text-secondary);padding:14px 0 4px;}
+.note{font-size:12px;color:var(--text-secondary);background:#fff9e8;border:1px solid #f0e2a8;padding:8px 14px;border-radius:6px;margin-bottom:var(--gap);}
+@media(max-width:768px){.kpi-row{grid-template-columns:repeat(2,1fr);}.chart-row{grid-template-columns:1fr;}}
+</style>
+</head>
+<body>
+<div class="dashboard-container">
+  <header class="dashboard-header">
+    <div>
+      <h1>Skyhill — Marketing &amp; Sales Dashboard</h1>
+      <p>Amounts in RM (Malaysian Ringgit) · Denai Alam &amp; Johor branches · Jan–Jun reported, Jul–Dec pending</p>
+    </div>
+    <div class="filters">
+      <div class="filter-group">
+        <label for="filter-branch">Branch</label>
+        <select id="filter-branch" onchange="dashboard.applyFilters()">
+          <option value="all">All Branches</option>
+          <option value="Denai Alam">Denai Alam</option>
+          <option value="Johor">Johor</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label for="filter-month">Month</label>
+        <select id="filter-month" onchange="dashboard.applyFilters()">
+          <option value="all">All Months (Jan–Jun)</option>
+          <option value="Jan">Jan</option>
+          <option value="Feb">Feb</option>
+          <option value="Mar">Mar</option>
+          <option value="Apr">Apr</option>
+          <option value="May">May</option>
+          <option value="Jun">Jun</option>
+        </select>
+      </div>
+    </div>
+  </header>
+
+  <div class="note">Jul–Dec have no reported data yet in the source sheets — they're excluded from charts/KPIs below.</div>
+
+  <section class="kpi-row" id="kpi-row"></section>
+
+  <section class="chart-row">
+    <div class="chart-container">
+      <h3>Ad Spend by Branch</h3>
+      <canvas id="spendChart"></canvas>
+    </div>
+    <div class="chart-container">
+      <h3>Total Sales by Branch</h3>
+      <canvas id="salesChart"></canvas>
+    </div>
+  </section>
+
+  <section class="chart-row">
+    <div class="chart-container">
+      <h3>Leads Generated by Branch</h3>
+      <canvas id="leadsChart"></canvas>
+    </div>
+    <div class="chart-container">
+      <h3>Blended ROAS by Branch</h3>
+      <canvas id="roasChart"></canvas>
+    </div>
+  </section>
+
+  <section class="chart-row">
+    <div class="chart-container">
+      <h3>Appointment Rate vs Closing Rate</h3>
+      <canvas id="rateChart"></canvas>
+    </div>
+    <div class="chart-container">
+      <h3>Cost per Lead / CPA (RM)</h3>
+      <canvas id="cplCpaChart"></canvas>
+    </div>
+  </section>
+
+  <section class="table-section">
+    <h3>Monthly Detail</h3>
+    <div id="detail-table"></div>
+  </section>
+
+  <footer class="dashboard-footer">Source: Skyhill Denai Alam &amp; Johor Google Sheets · Dashboard for the Skyhill team · Prepared by Fahmi</footer>
+</div>
+
+<script>
+const DATA = [
+  // Denai Alam
+  {branch:'Denai Alam', month:'Jan', spend:26203.00, campaigns:6, leads:1655, cpl:15.83, appt:91, conv:57, cpa:459.70, clinicSales:1080918.00, salesDiag:88407.00, sales1st:null, totalSales:88407.00, roasDiag:3.37, roas1st:null, apptRate:18.33, closeRate:62.64},
+  {branch:'Denai Alam', month:'Feb', spend:12623.00, campaigns:7, leads:1244, cpl:10.15, appt:71, conv:44, cpa:286.89, clinicSales:914226.00, salesDiag:78956.00, sales1st:233484.00, totalSales:312440.00, roasDiag:6.25, roas1st:8.91, apptRate:19.02, closeRate:61.97},
+  {branch:'Denai Alam', month:'Mar', spend:6624.00, campaigns:3, leads:998, cpl:6.64, appt:23, conv:18, cpa:368.00, clinicSales:904917.00, salesDiag:32482.00, sales1st:67560.00, totalSales:100042.00, roasDiag:4.90, roas1st:5.35, apptRate:7.68, closeRate:78.26},
+  {branch:'Denai Alam', month:'Apr', spend:8218.77, campaigns:4, leads:713, cpl:11.53, appt:89, conv:49, cpa:167.73, clinicSales:1294149.90, salesDiag:86552.00, sales1st:15341.00, totalSales:101893.00, roasDiag:10.53, roas1st:2.32, apptRate:41.61, closeRate:55.06},
+  {branch:'Denai Alam', month:'May', spend:18469.00, campaigns:7, leads:2029, cpl:9.10, appt:73, conv:69, cpa:267.67, clinicSales:1280033.70, salesDiag:111230.00, sales1st:38970.00, totalSales:150200.00, roasDiag:6.02, roas1st:4.74, apptRate:11.99, closeRate:94.52},
+  {branch:'Denai Alam', month:'Jun', spend:10356.00, campaigns:4, leads:1188, cpl:8.72, appt:34, conv:17, cpa:609.18, clinicSales:902488.25, salesDiag:29084.00, sales1st:45766.00, totalSales:74850.00, roasDiag:2.81, roas1st:2.48, apptRate:9.54, closeRate:50.00},
+  // Johor
+  {branch:'Johor', month:'Jan', spend:17563.00, campaigns:5, leads:1146, cpl:15.33, appt:28, conv:13, cpa:1351.00, clinicSales:162490.00, salesDiag:23487.00, sales1st:null, totalSales:23487.00, roasDiag:1.34, roas1st:null, apptRate:8.14, closeRate:46.43},
+  {branch:'Johor', month:'Feb', spend:8107.00, campaigns:7, leads:713, cpl:11.37, appt:12, conv:12, cpa:675.58, clinicSales:181213.00, salesDiag:8140.00, sales1st:null, totalSales:8140.00, roasDiag:1.00, roas1st:null, apptRate:5.61, closeRate:100.00},
+  {branch:'Johor', month:'Mar', spend:7457.00, campaigns:4, leads:494, cpl:15.10, appt:25, conv:11, cpa:677.91, clinicSales:113227.00, salesDiag:23131.00, sales1st:25734.00, totalSales:48865.00, roasDiag:3.10, roas1st:3.45, apptRate:16.87, closeRate:44.00},
+  {branch:'Johor', month:'Apr', spend:16314.00, campaigns:3, leads:1170, cpl:13.94, appt:51, conv:29, cpa:562.55, clinicSales:201857.00, salesDiag:56243.00, sales1st:75473.00, totalSales:131716.00, roasDiag:3.45, roas1st:4.63, apptRate:14.53, closeRate:56.86},
+  {branch:'Johor', month:'May', spend:6195.52, campaigns:1, leads:427, cpl:14.51, appt:26, conv:18, cpa:344.20, clinicSales:194679.00, salesDiag:31127.00, sales1st:68395.00, totalSales:99522.00, roasDiag:5.02, roas1st:11.04, apptRate:20.30, closeRate:69.23},
+  {branch:'Johor', month:'Jun', spend:8799.00, campaigns:1, leads:663, cpl:13.27, appt:21, conv:8, cpa:1099.88, clinicSales:160029.00, salesDiag:25434.00, sales1st:38469.00, totalSales:63903.00, roasDiag:2.89, roas1st:4.37, apptRate:10.56, closeRate:38.10},
+];
+
+const MONTH_ORDER = ['Jan','Feb','Mar','Apr','May','Jun'];
+const BRANCH_COLORS = {'Denai Alam':'#3b6fd6', 'Johor':'#e08a3c'};
+const COLORS = ['#3b6fd6','#e08a3c','#3fae6e','#d3495c','#8a6fd6','#3ba7a0'];
+
+function fmtRM(v){
+  if(v===null||v===undefined||isNaN(v)) return '—';
+  if(Math.abs(v)>=1e6) return 'RM'+(v/1e6).toFixed(2)+'M';
+  if(Math.abs(v)>=1e3) return 'RM'+(v/1e3).toFixed(1)+'K';
+  return 'RM'+v.toFixed(2);
+}
+function fmtNum(v){ if(v===null||v===undefined) return '—'; return v.toLocaleString(); }
+function fmtPct(v){ if(v===null||v===undefined||isNaN(v)) return '—'; return v.toFixed(1)+'%'; }
+function fmtX(v){ if(v===null||v===undefined||isNaN(v)) return '—'; return v.toFixed(2)+'x'; }
+
+class Dashboard{
+  constructor(data){
+    this.rawData = data;
+    this.filteredData = data;
+    this.charts = {};
+    this.init();
+  }
+  init(){
+    this.renderKPIs();
+    this.renderCharts();
+    this.renderTable();
+  }
+  applyFilters(){
+    const branch = document.getElementById('filter-branch').value;
+    const month = document.getElementById('filter-month').value;
+    this.filteredData = this.rawData.filter(d=>
+      (branch==='all' || d.branch===branch) && (month==='all' || d.month===month)
+    );
+    this.renderKPIs();
+    this.updateCharts();
+    this.renderTable();
+  }
+  branches(){
+    const branch = document.getElementById('filter-branch').value;
+    return branch==='all' ? ['Denai Alam','Johor'] : [branch];
+  }
+  months(){
+    const month = document.getElementById('filter-month').value;
+    return month==='all' ? MONTH_ORDER : [month];
+  }
+  renderKPIs(){
+    const d = this.filteredData;
+    const totalSpend = d.reduce((s,r)=>s+r.spend,0);
+    const totalLeads = d.reduce((s,r)=>s+r.leads,0);
+    const totalSales = d.reduce((s,r)=>s+r.totalSales,0);
+    const totalClinicSales = d.reduce((s,r)=>s+r.clinicSales,0);
+    const avgCpl = totalLeads ? totalSpend/totalLeads : NaN;
+    const avgApptRate = d.length ? d.reduce((s,r)=>s+r.apptRate,0)/d.length : NaN;
+    const avgCloseRate = d.length ? d.reduce((s,r)=>s+r.closeRate,0)/d.length : NaN;
+    const blendedRoas = totalSpend ? totalSales/totalSpend : NaN;
+
+    const cards = [
+      {label:'Total Ad Spend', value: fmtRM(totalSpend)},
+      {label:'Total Leads', value: fmtNum(totalLeads)},
+      {label:'Avg Cost per Lead', value: fmtRM(avgCpl)},
+      {label:'Total Sales (Diag + 1st Rvw)', value: fmtRM(totalSales)},
+      {label:'Total Clinic Sales', value: fmtRM(totalClinicSales)},
+      {label:'Blended ROAS', value: fmtX(blendedRoas)},
+      {label:'Avg Appointment Rate', value: fmtPct(avgApptRate)},
+      {label:'Avg Closing Rate', value: fmtPct(avgCloseRate)},
+    ];
+    document.getElementById('kpi-row').innerHTML = cards.map(c=>
+      `<div class="kpi-card"><div class="kpi-label">${c.label}</div><div class="kpi-value">${c.value}</div></div>`
+    ).join('');
+  }
+  // Build per-branch datasets aligned to the active month labels
+  branchSeries(field, months, branches){
+    return branches.map(b=>{
+      const rows = this.rawData.filter(r=>r.branch===b);
+      return months.map(m=>{
+        const row = rows.find(r=>r.month===m);
+        return row ? row[field] : null;
+      });
+    });
+  }
+  renderCharts(){
+    const months = this.months();
+    const branches = this.branches();
+    const c = this.charts;
+
+    const mk = (canvasId, type, field, opts={}) => {
+      const seriesData = this.branchSeries(field, months, branches);
+      return new Chart(document.getElementById(canvasId).getContext('2d'), {
+        type,
+        data:{
+          labels: months,
+          datasets: branches.map((b,i)=>({
+            label: b,
+            data: seriesData[i],
+            backgroundColor: type==='line' ? BRANCH_COLORS[b]+'20' : BRANCH_COLORS[b]+'CC',
+            borderColor: BRANCH_COLORS[b],
+            borderWidth: type==='line' ? 2 : 1,
+            borderRadius: type==='bar' ? 4 : 0,
+            tension:.3, pointRadius:4
+          }))
+        },
+        options:{
+          responsive:true, maintainAspectRatio:false,
+          plugins:{legend:{position:'top', labels:{usePointStyle:true}}},
+          scales:{y:{beginAtZero:true, ticks:{callback:v=>opts.fmt?opts.fmt(v):v}, max:opts.max}}
+        }
+      });
+    };
+
+    c.spend = mk('spendChart','bar','spend',{fmt:fmtRM});
+    c.sales = mk('salesChart','bar','totalSales',{fmt:fmtRM});
+    c.leads = mk('leadsChart','bar','leads',{fmt:fmtNum});
+    c.roas = mk('roasChart','line','roasDiag',{fmt:v=>v+'x'});
+    c.rate = new Chart(document.getElementById('rateChart').getContext('2d'), {
+      type:'line',
+      data:{labels: months, datasets: branches.flatMap((b,i)=>{
+        const rows = this.rawData.filter(r=>r.branch===b);
+        const apptSeries = months.map(m=>{const r=rows.find(r=>r.month===m); return r?r.apptRate:null;});
+        const closeSeries = months.map(m=>{const r=rows.find(r=>r.month===m); return r?r.closeRate:null;});
+        return [
+          {label:`${b} — Appt Rate`, data: apptSeries, borderColor: BRANCH_COLORS[b], backgroundColor: BRANCH_COLORS[b]+'20', tension:.3, pointRadius:4, borderDash:[]},
+          {label:`${b} — Close Rate`, data: closeSeries, borderColor: BRANCH_COLORS[b], backgroundColor: BRANCH_COLORS[b]+'20', tension:.3, pointRadius:4, borderDash:[6,4]}
+        ];
+      })},
+      options:{responsive:true, maintainAspectRatio:false,
+        plugins:{legend:{position:'top', labels:{usePointStyle:true, boxWidth:8, font:{size:10}}}},
+        scales:{y:{beginAtZero:true, max:100, ticks:{callback:v=>v+'%'}}}
+      }
+    });
+    c.cplCpa = new Chart(document.getElementById('cplCpaChart').getContext('2d'), {
+      type:'bar',
+      data:{labels: months, datasets: branches.flatMap((b)=>{
+        const rows = this.rawData.filter(r=>r.branch===b);
+        const cplSeries = months.map(m=>{const r=rows.find(r=>r.month===m); return r?r.cpl:null;});
+        return [{label:`${b} — CPL`, data: cplSeries, backgroundColor: BRANCH_COLORS[b]+'CC', borderRadius:4}];
+      })},
+      options:{responsive:true, maintainAspectRatio:false,
+        plugins:{legend:{position:'top', labels:{usePointStyle:true}}},
+        scales:{y:{beginAtZero:true, ticks:{callback:v=>fmtRM(v)}}}
+      }
+    });
+  }
+  updateCharts(){
+    Object.values(this.charts).forEach(ch=>ch.destroy());
+    this.renderCharts();
+  }
+  renderTable(){
+    const cols = [
+      {field:'branch', label:'Branch', format:(v)=>`<span class="branch-tag ${v==='Denai Alam'?'denai':'johor'}">${v}</span>`},
+      {field:'month', label:'Month'},
+      {field:'spend', label:'Spend', format:fmtRM},
+      {field:'campaigns', label:'Campaigns', format:fmtNum},
+      {field:'leads', label:'Leads', format:fmtNum},
+      {field:'cpl', label:'CPL', format:fmtRM},
+      {field:'appt', label:'Appt', format:fmtNum},
+      {field:'conv', label:'Conv', format:fmtNum},
+      {field:'cpa', label:'CPA', format:fmtRM},
+      {field:'clinicSales', label:'Clinic Sales', format:fmtRM},
+      {field:'salesDiag', label:'Sales (Diag)', format:fmtRM},
+      {field:'sales1st', label:'Sales (1st Rvw)', format:fmtRM},
+      {field:'totalSales', label:'Total Sales', format:fmtRM},
+      {field:'roasDiag', label:'ROAS (Diag)', format:fmtX},
+      {field:'roas1st', label:'ROAS (1st Rvw)', format:fmtX},
+      {field:'apptRate', label:'Appt Rate', format:fmtPct},
+      {field:'closeRate', label:'Close Rate', format:fmtPct},
+    ];
+    let sortCol=null, sortDir='desc';
+    const container = document.getElementById('detail-table');
+    const render = (data) => {
+      let html = '<table class="data-table"><thead><tr>';
+      cols.forEach(c=>{
+        const arrow = sortCol===c.field ? (sortDir==='asc'?' ▲':' ▼') : '';
+        html += `<th onclick="sortDetail('${c.field}')">${c.label}${arrow}</th>`;
+      });
+      html += '</tr></thead><tbody>';
+      data.forEach(row=>{
+        html += '<tr>';
+        cols.forEach(c=>{
+          const val = c.format ? c.format(row[c.field]) : row[c.field];
+          html += `<td>${val}</td>`;
+        });
+        html += '</tr>';
+      });
+      html += '</tbody></table>';
+      container.innerHTML = html;
+    };
+    window.sortDetail = function(field){
+      if(sortCol===field) sortDir = sortDir==='asc'?'desc':'asc';
+      else { sortCol=field; sortDir='desc'; }
+      const sorted = [...dashboard.filteredData].sort((a,b)=>{
+        const av=a[field], bv=b[field];
+        if(av===null) return 1; if(bv===null) return -1;
+        const cmp = av<bv?-1:av>bv?1:0;
+        return sortDir==='asc'?cmp:-cmp;
+      });
+      render(sorted);
+    };
+    render(this.filteredData);
+  }
+}
+
+const dashboard = new Dashboard(DATA);
+</script>
+</body>
+</html>
